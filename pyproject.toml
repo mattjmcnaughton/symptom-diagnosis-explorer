@@ -12,7 +12,10 @@ dependencies = [
     "datasets>=4.2.0",
     "dspy>=3.0.3",
     "mlflow>=3.5.0",
+    "pandas>=2.3.3",
+    "pandera[pandas,mypy]>=0.26.1",
     "peft>=0.17.1",
+    "rich>=14.0.0",
     "transformers>=4.57.1",
     "typer>=0.20.0",
 ]
@@ -22,3 +25,10 @@ symptom-diagnosis-explorer = "symptom_diagnosis_explorer.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/symptom_diagnosis_explorer"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.2",
+    "ruff>=0.14.1",
+    "ty>=0.0.1a23",
+]
