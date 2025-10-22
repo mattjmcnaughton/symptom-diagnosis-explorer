@@ -1,0 +1,24 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "symptom-diagnosis-explorer"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "datasets>=4.2.0",
+    "dspy>=3.0.3",
+    "mlflow>=3.5.0",
+    "peft>=0.17.1",
+    "transformers>=4.57.1",
+    "typer>=0.20.0",
+]
+
+[project.scripts]
+symptom-diagnosis-explorer = "symptom_diagnosis_explorer.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/symptom_diagnosis_explorer"]
