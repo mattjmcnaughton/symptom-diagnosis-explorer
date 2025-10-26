@@ -16,11 +16,18 @@ repos:
       - id: ruff
         name: ruff-lint
         args: [--fix]
+        exclude: \.ipynb$
       - id: ruff-format
         name: ruff-format
+        exclude: \.ipynb$
 
   - repo: local
     hooks:
+      - id: nbstripout
+        name: Strip Jupyter notebook outputs
+        entry: uv run nbstripout
+        language: system
+        files: \.ipynb$
       - id: typecheck
         name: ty Type Check (Backend)
         entry: bash -c 'uv run ty check src'

@@ -1,5 +1,16 @@
 """Commands for CLI operations."""
 
+from symptom_diagnosis_explorer.commands.classify import (
+    EvaluateCommand,
+    EvaluateRequest,
+    EvaluateResponse,
+    ListModelsCommand,
+    ListModelsRequest,
+    ListModelsResponse,
+    TuneCommand,
+    TuneRequest,
+    TuneResponse,
+)
 from symptom_diagnosis_explorer.commands.dataset import (
     DatasetListCommand,
     DatasetListRequest,
@@ -16,4 +27,13 @@ __all__ = [
     "DatasetSummaryCommand",
     "DatasetSummaryRequest",
     "DatasetSummaryResponse",
+    "EvaluateCommand",
+    "EvaluateRequest",
+    "EvaluateResponse",
+    "ListModelsCommand",
+    "ListModelsRequest",
+    "ListModelsResponse",
+    "TuneCommand",
+    "TuneRequest",
+    "TuneResponse",
 ]

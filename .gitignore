@@ -8,3 +8,8 @@ wheels/
 
 # Virtual environments
 .venv
+
+# MLflow
+.mlflow
+
+.ipynb_checkpoints

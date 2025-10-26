@@ -12,10 +12,12 @@ dependencies = [
     "datasets>=4.2.0",
     "dspy>=3.0.3",
     "mlflow>=3.5.0",
+    "ollama>=0.6.0",
     "pandas>=2.3.3",
     "pandera[pandas,mypy]>=0.26.1",
     "peft>=0.17.1",
     "rich>=14.0.0",
+    "scikit-learn>=1.7.2",
     "transformers>=4.57.1",
     "typer>=0.20.0",
 ]
@@ -28,7 +30,19 @@ packages = ["src/symptom_diagnosis_explorer"]
 
 [dependency-groups]
 dev = [
+    "ipykernel>=7.0.1",
+    "jupyterlab>=4.4.10",
+    "nbstripout>=0.8.1",
     "pytest>=8.4.2",
     "ruff>=0.14.1",
+    "tqdm>=4.67.1",
     "ty>=0.0.1a23",
+]
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: marks tests as integration tests (deselect with '-m \"not integration\"')",
+    "llm: marks tests as requiring LLM models (deselect with '-m \"not llm\"')",
+    "ollama: marks tests as requiring Ollama (deselect with '-m \"not ollama\"')",
+    "slow: marks tests as slow running (deselect with '-m \"not slow\"')",
 ]

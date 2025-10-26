@@ -5,6 +5,7 @@ from typing import Optional
 import pandas as pd
 import pandera.typing as pat
 from datasets import load_dataset
+from sklearn.model_selection import train_test_split
 
 from symptom_diagnosis_explorer.models import DatasetSplit, SymptomDiagnosisDatasetDF
 
@@ -23,6 +24,7 @@ class DatasetService:
         self._dataset = None
         self._train_df: Optional[pd.DataFrame] = None
         self._test_df: Optional[pd.DataFrame] = None
+        self._validation_df: Optional[pd.DataFrame] = None
 
     def load(self) -> None:
         """Load the dataset from Hugging Face Hub."""
@@ -66,6 +68,76 @@ class DatasetService:
             self._train_df = self._prepare_and_validate_dataframe(df)
 
         return self._train_df
+
+    def get_train_validation_split(
+        self, train_ratio: float = 0.8
+    ) -> tuple[
+        pat.DataFrame[SymptomDiagnosisDatasetDF],
+        pat.DataFrame[SymptomDiagnosisDatasetDF],
+    ]:
+        """Get train/validation split from the training data.
+
+        Splits the original training data into train and validation sets using a
+        deterministic random seed for reproducibility. Results are cached to ensure
+        consistency across multiple calls.
+
+        Args:
+            train_ratio: Proportion of data to use for training (default 0.8).
+
+        Returns:
+            Tuple of (train_df, validation_df) as validated pandas DataFrames.
+
+        Raises:
+            RuntimeError: If the dataset has not been loaded yet.
+        """
+        if self._dataset is None:
+            raise RuntimeError("Dataset not loaded. Call load() first.")
+
+        # Only perform split if not already cached
+        if self._train_df is None or self._validation_df is None:
+            # Get the original full training data
+            full_train_df = self._dataset["train"].to_pandas()
+            full_train_df = self._prepare_and_validate_dataframe(full_train_df)
+
+            # Split with deterministic random seed
+            train_df, val_df = train_test_split(
+                full_train_df,
+                train_size=train_ratio,
+                random_state=42,
+                shuffle=True,
+            )
+
+            # Reset indices for clean DataFrames
+            train_df = train_df.reset_index(drop=True)
+            val_df = val_df.reset_index(drop=True)
+
+            # Validate and cache
+            self._train_df = SymptomDiagnosisDatasetDF.validate(train_df)
+            self._validation_df = SymptomDiagnosisDatasetDF.validate(val_df)
+
+        return self._train_df, self._validation_df
+
+    def get_validation_dataframe(self) -> pat.DataFrame[SymptomDiagnosisDatasetDF]:
+        """Get the validation split as a pandas DataFrame.
+
+        Uses lazy loading pattern - calls get_train_validation_split() if not
+        already cached. This ensures consistent train/validation split across calls.
+
+        Returns:
+            Validated pandas DataFrame containing the validation data with columns:
+            symptoms, diagnosis.
+
+        Raises:
+            RuntimeError: If the dataset has not been loaded yet.
+        """
+        if self._dataset is None:
+            raise RuntimeError("Dataset not loaded. Call load() first.")
+
+        # Trigger split if not already done
+        if self._validation_df is None:
+            self.get_train_validation_split()
+
+        return self._validation_df
 
     def get_test_dataframe(self) -> pat.DataFrame[SymptomDiagnosisDatasetDF]:
         """Get the test split as a pandas DataFrame.
