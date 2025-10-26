@@ -6,22 +6,22 @@ dev:
      uv run txtpack
 
 lint:
-     uv run ruff check .
+     uv run ruff check ./src
 
 lint-fix:
-     uv run ruff check . --fix
+     uv run ruff check ./src --fix
 
 format:
-     uv run ruff format .
+     uv run ruff format ./src
 
 format-check:
-     uv run ruff format --check .
+     uv run ruff format --check ./src
 
 typecheck:
-     uv run ty check
+     uv run ty check src
 
-test:
-     uv run pytest
+test *args:
+     uv run pytest {{args}}
 
 test-unit:
      uv run pytest tests/unit/
@@ -33,3 +33,19 @@ test-e2e:
      uv run pytest tests/e2e/
 
 ci: lint format-check typecheck test
+
+# Create Jupyter kernel for this environment
+kernel:
+    uv run python -m ipykernel install --user --name=symptom-diagnosis-explorer --display-name="Symptom Diagnosis Explorer"
+
+# Launch Jupyter Lab
+notebook:
+    uv run jupyter lab
+
+# Launch MLflow UI
+mlflow:
+    uvx mlflow ui --backend-store-uri .mlflow --default-artifact-root .mlflow/artifacts --host 0.0.0.0 --port 5001
+
+# Strip output from all Jupyter notebooks
+nbstripout:
+    uv run nbstripout **/*.ipynb

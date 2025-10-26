@@ -13,7 +13,7 @@ class DatasetSummaryRequest(BaseModel):
 
     split: str = Field(
         default="all",
-        description="Dataset split to summarize (train/test/all)",
+        description="Dataset split to summarize (train/validation/test/all)",
     )
 
 
@@ -55,13 +55,15 @@ class DatasetSummaryCommand:
         # Get the appropriate dataframe based on split
         if request.split == "train":
             df = self.service.get_train_dataframe()
+        elif request.split == "validation":
+            df = self.service.get_validation_dataframe()
         elif request.split == "test":
             df = self.service.get_test_dataframe()
         elif request.split == "all":
             df = self.service.get_all_data_dataframe()
         else:
             raise ValueError(
-                f"Invalid split '{request.split}'. Choose from: train, test, all"
+                f"Invalid split '{request.split}'. Choose from: train, validation, test, all"
             )
 
         # Compute summary statistics
