@@ -1,4 +1,4 @@
-"""Service for DSPy-based model development with MLFlow tracking."""
+"""DSPy-based model development service with MLFlow tracking."""
 
 import os
 from typing import Any
@@ -10,48 +10,47 @@ import mlflow.dspy
 import pandas as pd
 from dspy.teleprompt import BootstrapFewShot, MIPROv2, Teleprompter
 
-from symptom_diagnosis_explorer.models.domain import (
-    SymptomDiagnosisSignature,
-)
+from symptom_diagnosis_explorer.models.domain import SymptomDiagnosisSignature
 from symptom_diagnosis_explorer.models.model_development import (
     ClassificationConfig,
+    DSPyConfig,
     EvaluateMetrics,
+    FrameworkType,
     ModelInfo,
     OptimizerType,
     TuneMetrics,
 )
-from symptom_diagnosis_explorer.services.dataset import DatasetService
+from symptom_diagnosis_explorer.services.ml_models.base import BaseModelService
+from symptom_diagnosis_explorer.services.ml_models.registry import FrameworkRegistry
 
 
-class ModelDevelopmentService:
-    """Service for model development using DSPy with MLFlow tracking.
+@FrameworkRegistry.register(FrameworkType.DSPY)
+class DSPyModelService(BaseModelService):
+    """DSPy-based model development service.
 
-    This service encapsulates all DSPy and MLFlow operations for developing
-    classification models: tuning/optimization, evaluation, and model registration.
+    This service implements the BaseModelService interface for DSPy framework,
+    handling model compilation/optimization, evaluation, and MLFlow tracking.
 
-    MLFlow Experiment Naming:
-    Experiments are organized hierarchically with the format: /system/project/experiment
-    Example: /symptom-diagnosis-explorer/1-dspy/initial-pipeline
-    - system: Hard-coded to "symptom-diagnosis-explorer"
-    - project: Set from the project identifier
-    - experiment: Set from the experiment name
-
-    The service follows the existing pattern:
-    - Lazy loading and caching for expensive operations
-    - Type-safe configuration and results
-    - Integration with DatasetService for data access
+    DSPy requires training through compilation with optimizers like
+    BootstrapFewShot or MIPROv2.
     """
 
     def __init__(self, config: ClassificationConfig) -> None:
-        """Initialize the model development service.
+        """Initialize the DSPy model service.
 
         Sets up DSPy language model configuration and MLFlow tracking.
 
         Args:
             config: Classification configuration including LM, optimizer, and MLFlow settings.
         """
-        self.config = config
-        self.dataset_service = DatasetService()
+        super().__init__(config)
+
+        # Extract DSPy config from framework_config
+        if not isinstance(config.framework_config, DSPyConfig):
+            raise ValueError(
+                f"Expected DSPyConfig, got {type(config.framework_config).__name__}"
+            )
+        self.dspy_config = config.framework_config
 
         # Configure DSPy with language model
         lm = dspy.LM(
@@ -68,17 +67,18 @@ class ModelDevelopmentService:
             log_traces_from_compile=False,
         )
 
-        # Set MLFlow tracking URI and experiment
-        mlflow.set_tracking_uri(config.mlflow_tracking_uri)
-        mlflow.set_experiment(config.mlflow_experiment_name)
+        # Setup MLFlow experiment with framework tagging
+        self._setup_mlflow_experiment("dspy")
 
-        # Set experiment tags
-        mlflow.set_experiment_tags(
-            {
-                "system": "symptom-diagnosis-explorer",
-                "project": config.mlflow_experiment_project,
-            }
-        )
+    @property
+    def requires_training(self) -> bool:
+        """DSPy always requires training through compilation."""
+        return True
+
+    @property
+    def framework_type(self) -> str:
+        """Framework type identifier."""
+        return FrameworkType.DSPY
 
     def _convert_to_dspy_examples(self, df: pd.DataFrame) -> list[dspy.Example]:
         """Convert pandas DataFrame to list of DSPy Examples.
@@ -117,7 +117,7 @@ class ModelDevelopmentService:
         Returns:
             Configured optimizer (BootstrapFewShot or MIPROv2).
         """
-        optimizer_config = self.config.optimizer_config
+        optimizer_config = self.dspy_config.optimizer_config
 
         if optimizer_config.optimizer_type == OptimizerType.BOOTSTRAP_FEW_SHOT:
             return BootstrapFewShot(
@@ -171,17 +171,6 @@ class ModelDevelopmentService:
         predicted = str(prediction.diagnosis).strip().lower()
         actual = str(example.diagnosis).strip().lower()
         return 1.0 if predicted == actual else 0.0
-
-    def _log_dataset_info(self, split: str, num_examples: int) -> None:
-        """Log dataset information to MLFlow.
-
-        Args:
-            split: Dataset split name (train, validation, test).
-            num_examples: Number of examples in this split.
-        """
-        # Log dataset info with context
-        mlflow.log_param(f"dataset_{split}_source", self.config.dataset_identifier)
-        mlflow.log_param(f"dataset_{split}_size", num_examples)
 
     def _log_predictions_artifacts(
         self,
@@ -668,34 +657,39 @@ class ModelDevelopmentService:
         with mlflow.start_run(run_id=self.config.mlflow_run_id) as run:
             # Log common parameters
             params_to_log = {
-                "optimizer_type": self.config.optimizer_config.optimizer_type.value,
+                "framework": "dspy",
+                "requires_training": True,
+                "optimizer_type": self.dspy_config.optimizer_config.optimizer_type.value,
                 "lm_model": self.config.lm_config.model,
                 "train_size": len(train_examples),
                 "val_size": len(val_examples),
-                "num_threads": self.config.optimizer_config.num_threads,
+                "num_threads": self.dspy_config.optimizer_config.num_threads,
             }
 
             # Log optimizer-specific parameters
             if (
-                self.config.optimizer_config.optimizer_type
+                self.dspy_config.optimizer_config.optimizer_type
                 == OptimizerType.BOOTSTRAP_FEW_SHOT
             ):
                 params_to_log.update(
                     {
-                        "bootstrap_max_bootstrapped_demos": self.config.optimizer_config.bootstrap_max_bootstrapped_demos,
-                        "bootstrap_max_labeled_demos": self.config.optimizer_config.bootstrap_max_labeled_demos,
+                        "bootstrap_max_bootstrapped_demos": self.dspy_config.optimizer_config.bootstrap_max_bootstrapped_demos,
+                        "bootstrap_max_labeled_demos": self.dspy_config.optimizer_config.bootstrap_max_labeled_demos,
                     }
                 )
-            elif self.config.optimizer_config.optimizer_type == OptimizerType.MIPRO_V2:
+            elif (
+                self.dspy_config.optimizer_config.optimizer_type
+                == OptimizerType.MIPRO_V2
+            ):
                 params_to_log.update(
                     {
-                        "mipro_auto": str(self.config.optimizer_config.mipro_auto),
-                        "mipro_minibatch_size": self.config.optimizer_config.mipro_minibatch_size,
-                        "mipro_minibatch_full_eval_steps": self.config.optimizer_config.mipro_minibatch_full_eval_steps,
-                        "mipro_program_aware_proposer": self.config.optimizer_config.mipro_program_aware_proposer,
-                        "mipro_data_aware_proposer": self.config.optimizer_config.mipro_data_aware_proposer,
-                        "mipro_tip_aware_proposer": self.config.optimizer_config.mipro_tip_aware_proposer,
-                        "mipro_fewshot_aware_proposer": self.config.optimizer_config.mipro_fewshot_aware_proposer,
+                        "mipro_auto": str(self.dspy_config.optimizer_config.mipro_auto),
+                        "mipro_minibatch_size": self.dspy_config.optimizer_config.mipro_minibatch_size,
+                        "mipro_minibatch_full_eval_steps": self.dspy_config.optimizer_config.mipro_minibatch_full_eval_steps,
+                        "mipro_program_aware_proposer": self.dspy_config.optimizer_config.mipro_program_aware_proposer,
+                        "mipro_data_aware_proposer": self.dspy_config.optimizer_config.mipro_data_aware_proposer,
+                        "mipro_tip_aware_proposer": self.dspy_config.optimizer_config.mipro_tip_aware_proposer,
+                        "mipro_fewshot_aware_proposer": self.dspy_config.optimizer_config.mipro_fewshot_aware_proposer,
                     }
                 )
 
@@ -708,17 +702,20 @@ class ModelDevelopmentService:
             }
 
             # Add MIPROv2-specific compile arguments
-            if self.config.optimizer_config.optimizer_type == OptimizerType.MIPRO_V2:
+            if (
+                self.dspy_config.optimizer_config.optimizer_type
+                == OptimizerType.MIPRO_V2
+            ):
                 compile_kwargs.update(
                     {
                         "valset": val_examples,
                         "minibatch": True,
-                        "minibatch_size": self.config.optimizer_config.mipro_minibatch_size,
-                        "minibatch_full_eval_steps": self.config.optimizer_config.mipro_minibatch_full_eval_steps,
-                        "program_aware_proposer": self.config.optimizer_config.mipro_program_aware_proposer,
-                        "data_aware_proposer": self.config.optimizer_config.mipro_data_aware_proposer,
-                        "tip_aware_proposer": self.config.optimizer_config.mipro_tip_aware_proposer,
-                        "fewshot_aware_proposer": self.config.optimizer_config.mipro_fewshot_aware_proposer,
+                        "minibatch_size": self.dspy_config.optimizer_config.mipro_minibatch_size,
+                        "minibatch_full_eval_steps": self.dspy_config.optimizer_config.mipro_minibatch_full_eval_steps,
+                        "program_aware_proposer": self.dspy_config.optimizer_config.mipro_program_aware_proposer,
+                        "data_aware_proposer": self.dspy_config.optimizer_config.mipro_data_aware_proposer,
+                        "tip_aware_proposer": self.dspy_config.optimizer_config.mipro_tip_aware_proposer,
+                        "fewshot_aware_proposer": self.dspy_config.optimizer_config.mipro_fewshot_aware_proposer,
                     }
                 )
 
@@ -825,6 +822,7 @@ class ModelDevelopmentService:
         with mlflow.start_run(run_id=self.config.mlflow_run_id) as run:
             mlflow.log_params(
                 {
+                    "framework": "dspy",
                     "model_name": model_name,
                     "model_version": model_version or "latest",
                     "split": split,
@@ -840,59 +838,3 @@ class ModelDevelopmentService:
                 num_examples=len(examples),
                 run_id=run.info.run_id,
             )
-
-    def list_models(self, name_filter: str | None = None) -> pd.DataFrame:
-        """List registered models from MLFlow registry.
-
-        Args:
-            name_filter: Optional filter to match model names (substring match).
-
-        Returns:
-            DataFrame with columns: name, version, stage, creation_time, metrics.
-        """
-        client = mlflow.tracking.MlflowClient()
-
-        # Get all registered models
-        models = client.search_registered_models()
-
-        # Filter by name if specified
-        if name_filter:
-            models = [m for m in models if name_filter.lower() in m.name.lower()]
-
-        # Build DataFrame rows
-        rows = []
-        for model in models:
-            # Get all versions for this model
-            versions = client.search_model_versions(f"name='{model.name}'")
-
-            for version in versions:
-                # Get metrics from the run that created this version
-                metrics = {}
-                if version.run_id:
-                    try:
-                        run = client.get_run(version.run_id)
-                        metrics = run.data.metrics
-                    except Exception:
-                        # Run may not exist anymore
-                        pass
-
-                rows.append(
-                    {
-                        "name": model.name,
-                        "version": version.version,
-                        "aliases": list(version.aliases) if version.aliases else [],
-                        "creation_time": pd.to_datetime(
-                            version.creation_timestamp, unit="ms"
-                        ),
-                        "metrics": metrics,
-                    }
-                )
-
-        # Create DataFrame
-        df = pd.DataFrame(rows)
-
-        # Sort by creation time descending (newest first)
-        if not df.empty:
-            df = df.sort_values("creation_time", ascending=False)
-
-        return df

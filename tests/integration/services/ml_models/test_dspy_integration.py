@@ -1,4 +1,4 @@
-"""Integration tests for the ModelDevelopmentService with Ollama LLMs.
+"""Integration tests for the DSPyModelService with Ollama LLMs.
 
 This test module requires Ollama models to be available locally.
 The entire module will fail if required models are not found.
@@ -11,19 +11,17 @@ Required models:
 from pathlib import Path
 
 import mlflow
-import pandas as pd
 import pytest
 
 from tests.integration.conftest import check_all_required_models
 from symptom_diagnosis_explorer.models.model_development import (
     ClassificationConfig,
+    DSPyConfig,
     LMConfig,
     OptimizerConfig,
     OptimizerType,
 )
-from symptom_diagnosis_explorer.services.model_development import (
-    ModelDevelopmentService,
-)
+from symptom_diagnosis_explorer.services.ml_models.dspy import DSPyModelService
 
 
 # Required Ollama models for this test module
@@ -52,7 +50,7 @@ except Exception as e:
 def model_development_config(
     test_model_name: str, mlflow_test_dir: Path
 ) -> ClassificationConfig:
-    """Create test configuration for ModelDevelopmentService.
+    """Create test configuration for DSPyModelService.
 
     Args:
         test_model_name: Name of Ollama model to use.
@@ -67,11 +65,13 @@ def model_development_config(
             temperature=0.0,
             max_tokens=200,  # Needs to be large enough for full JSON responses
         ),
-        optimizer_config=OptimizerConfig(
-            optimizer_type=OptimizerType.BOOTSTRAP_FEW_SHOT,
-            num_threads=2,  # Lower for tests
-            max_bootstrapped_demos=2,  # Keep small
-            max_labeled_demos=2,  # Keep small
+        framework_config=DSPyConfig(
+            optimizer_config=OptimizerConfig(
+                optimizer_type=OptimizerType.BOOTSTRAP_FEW_SHOT,
+                num_threads=2,  # Lower for tests
+                bootstrap_max_bootstrapped_demos=2,  # Keep small
+                bootstrap_max_labeled_demos=2,  # Keep small
+            )
         ),
         mlflow_experiment_name="/test/symptom-diagnosis-explorer/1-dspy/classification",
         mlflow_experiment_project="1-dspy",
@@ -88,16 +88,16 @@ def model_development_config(
 @pytest.fixture
 def model_development_service(
     model_development_config: ClassificationConfig,
-) -> ModelDevelopmentService:
-    """Create ModelDevelopmentService instance for testing.
+) -> DSPyModelService:
+    """Create DSPyModelService instance for testing.
 
     Args:
         model_development_config: Test configuration.
 
     Returns:
-        Configured ModelDevelopmentService.
+        Configured DSPyModelService.
     """
-    return ModelDevelopmentService(model_development_config)
+    return DSPyModelService(model_development_config)
 
 
 @pytest.fixture
@@ -123,11 +123,11 @@ def model_development_config_mipro_v2(
             temperature=0.0,
             max_tokens=200,  # Needs to be large enough for full JSON responses
         ),
-        optimizer_config=OptimizerConfig(
-            optimizer_type=OptimizerType.MIPRO_V2,
-            num_threads=2,  # Lower for tests
-            max_bootstrapped_demos=2,  # Keep small
-            max_labeled_demos=2,  # Keep small
+        framework_config=DSPyConfig(
+            optimizer_config=OptimizerConfig(
+                optimizer_type=OptimizerType.MIPRO_V2,
+                num_threads=2,  # Lower for tests
+            )
         ),
         mlflow_experiment_name="/test/symptom-diagnosis-explorer/1-dspy/classification-mipro",
         mlflow_experiment_project="1-dspy",
@@ -142,28 +142,26 @@ def model_development_config_mipro_v2(
 @pytest.fixture
 def model_development_service_mipro_v2(
     model_development_config_mipro_v2: ClassificationConfig,
-) -> ModelDevelopmentService:
-    """Create ModelDevelopmentService instance with MIPRO_V2 for testing.
+) -> DSPyModelService:
+    """Create DSPyModelService instance with MIPRO_V2 for testing.
 
     Args:
         model_development_config_mipro_v2: MIPRO_V2 test configuration.
 
     Returns:
-        Configured ModelDevelopmentService with MIPRO_V2.
+        Configured DSPyModelService with MIPRO_V2.
     """
-    return ModelDevelopmentService(model_development_config_mipro_v2)
+    return DSPyModelService(model_development_config_mipro_v2)
 
 
 @pytest.mark.integration
 @pytest.mark.llm
 @pytest.mark.ollama
 class TestModelDevelopmentService:
-    """Integration tests for ModelDevelopmentService with Ollama models."""
+    """Integration tests for DSPyModelService with Ollama models."""
 
     @pytest.mark.slow
-    def test_tune_with_small_dataset(
-        self, model_development_service: ModelDevelopmentService
-    ):
+    def test_tune_with_small_dataset(self, model_development_service: DSPyModelService):
         """Test model tuning with very small dataset.
 
         This test uses minimal data (5 train, 3 validation) to verify the
@@ -193,7 +191,7 @@ class TestModelDevelopmentService:
 
     @pytest.mark.slow
     def test_tune_with_mipro_v2_optimizer(
-        self, model_development_service_mipro_v2: ModelDevelopmentService
+        self, model_development_service_mipro_v2: DSPyModelService
     ):
         """Test model tuning with MIPRO_V2 optimizer.
 
@@ -223,7 +221,7 @@ class TestModelDevelopmentService:
         assert "validation_accuracy" in model_info.metrics
 
     @pytest.mark.slow
-    def test_evaluate_model(self, model_development_service: ModelDevelopmentService):
+    def test_evaluate_model(self, model_development_service: DSPyModelService):
         """Test model evaluation on test split.
 
         This test requires a trained model, so it runs after tune.
@@ -260,50 +258,10 @@ class TestModelDevelopmentService:
             # Restore original
             model_development_service.dataset_service._test_df = original_test
 
-    def test_list_models(self, model_development_service: ModelDevelopmentService):
-        """Test listing models from registry."""
-        # First, create a model
-        model_development_service.tune(
-            train_size=5,
-            val_size=3,
-            model_name="test-list-classifier",
-        )
-
-        # List models
-        models_df = model_development_service.list_models()
-
-        # Verify DataFrame structure
-        assert isinstance(models_df, pd.DataFrame)
-        if not models_df.empty:
-            assert "name" in models_df.columns
-            assert "version" in models_df.columns
-            assert "aliases" in models_df.columns
-            assert "creation_time" in models_df.columns
-            assert "metrics" in models_df.columns
-
-    def test_list_models_with_filter(
-        self, model_development_service: ModelDevelopmentService
-    ):
-        """Test listing models with name filter."""
-        # Create models with different names
-        model_development_service.tune(
-            train_size=5,
-            val_size=3,
-            model_name="test-filter-model-a",
-        )
-
-        # List with filter
-        models_df = model_development_service.list_models(name_filter="filter-model")
-
-        # Verify filtering worked
-        assert isinstance(models_df, pd.DataFrame)
-        if not models_df.empty:
-            assert all("filter-model" in name.lower() for name in models_df["name"])
-
     @pytest.mark.slow
     @pytest.mark.mlflow
     def test_mlflow_logging_behavior(
-        self, model_development_service: ModelDevelopmentService, mlflow_test_dir: Path
+        self, model_development_service: DSPyModelService, mlflow_test_dir: Path
     ):
         """Test MLFlow logging behavior: artifacts, tags, and metrics.
 

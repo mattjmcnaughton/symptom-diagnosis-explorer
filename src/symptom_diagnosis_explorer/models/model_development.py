@@ -1,8 +1,9 @@
 """Model development domain models for DSPy optimization and MLFlow tracking."""
 
 from enum import Enum
+from typing import Annotated, Literal, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 
 
 class OptimizerType(str, Enum):
@@ -145,14 +146,133 @@ class LMConfig(BaseModel):
     )
 
 
+class FrameworkType(str, Enum):
+    """Enumeration of supported ML frameworks."""
+
+    DSPY = "dspy"
+    LANGCHAIN = "langchain"
+    PYDANTIC_AI = "pydantic-ai"
+
+
+class BaseFrameworkConfig(BaseModel):
+    """Base class for framework-specific configuration.
+
+    All framework configs must extend this class and provide a framework
+    type discriminator for Pydantic's discriminated union support.
+    """
+
+    framework: str = Field(description="Framework type identifier")
+
+    @computed_field
+    @property
+    def requires_training(self) -> bool:
+        """Whether this framework requires training/optimization.
+
+        This should be overridden by subclasses to indicate if the framework
+        requires a training phase (like DSPy compilation) or not (like LangChain
+        prompt engineering).
+
+        Returns:
+            True if framework requires training, False otherwise.
+        """
+        raise NotImplementedError(
+            f"{self.__class__.__name__} must implement requires_training property"
+        )
+
+
+class DSPyConfig(BaseFrameworkConfig):
+    """DSPy-specific framework configuration.
+
+    DSPy requires training/optimization through compilation with optimizers
+    like BootstrapFewShot or MIPROv2.
+    """
+
+    framework: Literal[FrameworkType.DSPY] = FrameworkType.DSPY
+    optimizer_config: OptimizerConfig = Field(
+        default_factory=OptimizerConfig,
+        description="DSPy optimizer configuration",
+    )
+
+    @computed_field
+    @property
+    def requires_training(self) -> bool:
+        """DSPy always requires training through compilation."""
+        return True
+
+
+class LangChainConfig(BaseFrameworkConfig):
+    """LangChain-specific framework configuration.
+
+    LangChain uses prompt engineering without training. The 'tune' operation
+    validates the prompt and evaluates performance but does not optimize.
+
+    Few-shot examples are managed directly in the prompt templates rather than
+    being configured dynamically.
+    """
+
+    framework: Literal[FrameworkType.LANGCHAIN] = FrameworkType.LANGCHAIN
+    prompt_template_name: str = Field(
+        default="symptom_diagnosis",
+        description="Name of the prompt template to use",
+    )
+    chain_type: Literal["simple", "structured_output"] = Field(
+        default="structured_output",
+        description="Type of LangChain chain to create",
+    )
+
+    @computed_field
+    @property
+    def requires_training(self) -> bool:
+        """LangChain does not require training - it uses fixed prompts."""
+        return False
+
+
+class PydanticAIConfig(BaseFrameworkConfig):
+    """Pydantic-AI-specific framework configuration.
+
+    Pydantic-AI uses agent-based prompt engineering without training. The 'tune'
+    operation validates the agent configuration and evaluates performance but does
+    not optimize. Like LangChain, it uses fixed prompts.
+
+    Key features:
+    - Structured output validation with Pydantic models
+    - Built-in retry mechanism with ModelRetry
+    - Dynamic system prompts via decorators
+    - Uses tool-based output mode (default, most reliable)
+    """
+
+    framework: Literal[FrameworkType.PYDANTIC_AI] = FrameworkType.PYDANTIC_AI
+    num_few_shot_examples: int = Field(
+        default=0,
+        ge=0,
+        description="Number of few-shot examples to include in system prompts",
+    )
+
+    @computed_field
+    @property
+    def requires_training(self) -> bool:
+        """Pydantic-AI does not require training - it uses fixed agents."""
+        return False
+
+
+# Discriminated union of framework configs
+FrameworkConfig = Annotated[
+    Union[DSPyConfig, LangChainConfig, PydanticAIConfig],
+    Field(discriminator="framework"),
+]
+
+
 class ClassificationConfig(BaseModel):
     """Top-level configuration for classification system.
 
-    Combines language model, optimizer, and MLFlow tracking configuration.
+    Supports multiple ML frameworks through a discriminated union.
+    The framework_config field determines which framework-specific service
+    will be used.
 
     Attributes:
-        lm_config: Language model configuration.
-        optimizer_config: Optimizer configuration.
+        lm_config: Language model configuration (shared across frameworks).
+        framework_config: Framework-specific configuration (DSPy or LangChain).
+        optimizer_config: DEPRECATED - use framework_config.optimizer_config for DSPy.
         mlflow_experiment_name: Name of MLFlow experiment for tracking.
         mlflow_experiment_project: Project name for MLFlow experiment tagging.
         mlflow_tracking_uri: MLFlow tracking server URI.
@@ -165,9 +285,14 @@ class ClassificationConfig(BaseModel):
         default_factory=LMConfig,
         description="Language model configuration",
     )
-    optimizer_config: OptimizerConfig = Field(
-        default_factory=OptimizerConfig,
-        description="Optimizer configuration",
+    framework_config: FrameworkConfig = Field(
+        default_factory=lambda: DSPyConfig(),
+        description="Framework-specific configuration (discriminated union)",
+    )
+    # DEPRECATED: kept for backward compatibility during migration
+    optimizer_config: OptimizerConfig | None = Field(
+        default=None,
+        description="DEPRECATED - use framework_config.optimizer_config instead",
     )
     mlflow_experiment_name: str = Field(
         description="MLFlow experiment name (format: /symptom-diagnosis-explorer/{project}/{experiment})",

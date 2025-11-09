@@ -13,12 +13,13 @@ from symptom_diagnosis_explorer.commands import (
     DatasetSummaryRequest,
     EvaluateCommand,
     EvaluateRequest,
-    ListModelsCommand,
-    ListModelsRequest,
     TuneCommand,
     TuneRequest,
 )
-from symptom_diagnosis_explorer.models.model_development import OptimizerType
+from symptom_diagnosis_explorer.models.model_development import (
+    OptimizerType,
+    FrameworkType,
+)
 
 app = typer.Typer(
     name="symptom-diagnosis-explorer",
@@ -34,7 +35,7 @@ app.add_typer(dataset_app, name="dataset")
 
 classify_app = typer.Typer(
     name="classify",
-    help="Symptom classification with DSPy.",
+    help="Symptom classification with multiple ML frameworks (DSPy, LangChain).",
 )
 app.add_typer(classify_app, name="classify")
 
@@ -151,12 +152,12 @@ def dataset_summary(
 
 @classify_app.command("tune")
 def classify_tune(
-    optimizer: Annotated[
-        OptimizerType,
+    framework: Annotated[
+        FrameworkType,
         typer.Option(
-            help="Optimizer type (bootstrap or mipro)",
+            help="ML framework to use (dspy, langchain, or pydantic-ai)",
         ),
-    ] = OptimizerType.BOOTSTRAP_FEW_SHOT,
+    ] = FrameworkType.DSPY,
     train_size: Annotated[
         Optional[int],
         typer.Option(
@@ -178,7 +179,7 @@ def classify_tune(
     project: Annotated[
         str,
         typer.Option(
-            help="Project identifier for MLFlow (e.g., 1-dspy)",
+            help="Project identifier for MLFlow (e.g., 1-dspy, 2-langchain)",
         ),
     ] = "default",
     experiment_name: Annotated[
@@ -196,7 +197,7 @@ def classify_tune(
     num_threads: Annotated[
         int,
         typer.Option(
-            help="Number of parallel threads for optimization",
+            help="Number of parallel threads for optimization (DSPy only)",
         ),
     ] = 4,
     mlflow_tracking_uri: Annotated[
@@ -205,80 +206,101 @@ def classify_tune(
             help="MLFlow tracking server URI",
         ),
     ] = "http://localhost:5001",
-    # Bootstrap-specific options
-    bootstrap_max_bootstrapped_demos: Annotated[
+    # DSPy-specific options
+    dspy_optimizer: Annotated[
+        OptimizerType,
+        typer.Option(
+            help="[DSPy] Optimizer type (bootstrap or mipro)",
+        ),
+    ] = OptimizerType.BOOTSTRAP_FEW_SHOT,
+    dspy_bootstrap_max_bootstrapped_demos: Annotated[
         int,
         typer.Option(
-            help="Bootstrap: Maximum number of bootstrapped demonstrations",
+            help="[DSPy] Bootstrap: Maximum number of bootstrapped demonstrations",
         ),
     ] = 3,
-    bootstrap_max_labeled_demos: Annotated[
+    dspy_bootstrap_max_labeled_demos: Annotated[
         int,
         typer.Option(
-            help="Bootstrap: Maximum number of labeled demonstrations",
+            help="[DSPy] Bootstrap: Maximum number of labeled demonstrations",
         ),
     ] = 4,
-    # MIPROv2-specific options
-    mipro_auto: Annotated[
+    dspy_mipro_auto: Annotated[
         str,
         typer.Option(
-            help="MiPro: Auto mode - 'light' (fast, 6 candidates), 'medium' (balanced, 12 candidates), 'heavy' (thorough, 18 candidates), 'none' (manual)",
+            help="[DSPy] MiPro: Auto mode - 'light' (fast, 6 candidates), 'medium' (balanced, 12 candidates), 'heavy' (thorough, 18 candidates), 'none' (manual)",
         ),
     ] = "light",
-    mipro_minibatch_size: Annotated[
+    dspy_mipro_minibatch_size: Annotated[
         int,
         typer.Option(
-            help="MiPro: Minibatch size for faster evaluation (lower = faster but less stable, typical: 20-50)",
+            help="[DSPy] MiPro: Minibatch size for faster evaluation (lower = faster but less stable, typical: 20-50)",
         ),
     ] = 35,
-    mipro_minibatch_full_eval_steps: Annotated[
+    dspy_mipro_minibatch_full_eval_steps: Annotated[
         int,
         typer.Option(
-            help="MiPro: Frequency of full validation evaluations (higher = faster, typical: 5-10)",
+            help="[DSPy] MiPro: Frequency of full validation evaluations (higher = faster, typical: 5-10)",
         ),
     ] = 5,
-    mipro_program_aware_proposer: Annotated[
+    dspy_mipro_program_aware_proposer: Annotated[
         bool,
         typer.Option(
-            help="MiPro: Enable program-aware instruction generation (disable for faster tuning)",
+            help="[DSPy] MiPro: Enable program-aware instruction generation (disable for faster tuning)",
         ),
     ] = True,
-    mipro_data_aware_proposer: Annotated[
+    dspy_mipro_data_aware_proposer: Annotated[
         bool,
         typer.Option(
-            help="MiPro: Enable data-aware instruction generation (disable for faster tuning)",
+            help="[DSPy] MiPro: Enable data-aware instruction generation (disable for faster tuning)",
         ),
     ] = True,
-    mipro_tip_aware_proposer: Annotated[
+    dspy_mipro_tip_aware_proposer: Annotated[
         bool,
         typer.Option(
-            help="MiPro: Enable tip-based instruction generation (disable for faster tuning)",
+            help="[DSPy] MiPro: Enable tip-based instruction generation (disable for faster tuning)",
         ),
     ] = True,
-    mipro_fewshot_aware_proposer: Annotated[
+    dspy_mipro_fewshot_aware_proposer: Annotated[
         bool,
         typer.Option(
-            help="MiPro: Enable few-shot aware instruction generation (disable for faster tuning)",
+            help="[DSPy] MiPro: Enable few-shot aware instruction generation (disable for faster tuning)",
         ),
     ] = True,
+    # Pydantic-AI-specific options
+    pydantic_ai_num_few_shot_examples: Annotated[
+        int,
+        typer.Option(
+            help="[Pydantic-AI] Number of few-shot examples to include in system prompts",
+        ),
+    ] = 0,
 ) -> None:
-    """Tune DSPy classification model with automatic validation evaluation.
+    """Tune classification model using DSPy, LangChain, or Pydantic-AI with automatic validation evaluation.
 
     Examples:
-        # Basic tuning with defaults
-        symptom-diagnosis-explorer classify tune
+        # DSPy tuning with defaults
+        symptom-diagnosis-explorer classify tune --framework dspy
 
-        # Custom optimizer and dataset size
-        symptom-diagnosis-explorer classify tune --optimizer mipro --train-size 100 --val-size 20
+        # LangChain tuning (zero-shot)
+        symptom-diagnosis-explorer classify tune --framework langchain
+
+        # Pydantic-AI tuning (zero-shot)
+        symptom-diagnosis-explorer classify tune --framework pydantic-ai
+
+        # Pydantic-AI with few-shot examples
+        symptom-diagnosis-explorer classify tune --framework pydantic-ai --pydantic-ai-num-few-shot-examples 3
+
+        # DSPy with custom optimizer and dataset size
+        symptom-diagnosis-explorer classify tune --framework dspy --dspy-optimizer mipro --train-size 100 --val-size 20
 
         # Different LLM model
         symptom-diagnosis-explorer classify tune --lm-model ollama/mistral:7b
     """
-    console.print("[bold]Tuning classification model...[/bold]")
+    console.print(f"[bold]Tuning classification model with {framework.value}...[/bold]")
 
     try:
         # Handle mipro_auto conversion: "none" string -> None
-        mipro_auto_value = None if mipro_auto == "none" else mipro_auto
+        mipro_auto_value = None if dspy_mipro_auto == "none" else dspy_mipro_auto
 
         # Construct full experiment name: /symptom-diagnosis-explorer/{project}/{experiment-name}
         full_experiment_name = (
@@ -287,24 +309,26 @@ def classify_tune(
 
         # Create request and execute command
         request = TuneRequest(
-            optimizer=optimizer,
+            framework=framework,
             train_size=train_size,
             val_size=val_size,
             model_name=model_name,
             experiment_name=full_experiment_name,
             experiment_project=project,
             lm_model=lm_model,
-            num_threads=num_threads,
+            dspy_num_threads=num_threads,
             mlflow_tracking_uri=mlflow_tracking_uri,
-            bootstrap_max_bootstrapped_demos=bootstrap_max_bootstrapped_demos,
-            bootstrap_max_labeled_demos=bootstrap_max_labeled_demos,
-            mipro_auto=mipro_auto_value,
-            mipro_minibatch_size=mipro_minibatch_size,
-            mipro_minibatch_full_eval_steps=mipro_minibatch_full_eval_steps,
-            mipro_program_aware_proposer=mipro_program_aware_proposer,
-            mipro_data_aware_proposer=mipro_data_aware_proposer,
-            mipro_tip_aware_proposer=mipro_tip_aware_proposer,
-            mipro_fewshot_aware_proposer=mipro_fewshot_aware_proposer,
+            dspy_optimizer=dspy_optimizer,
+            dspy_bootstrap_max_bootstrapped_demos=dspy_bootstrap_max_bootstrapped_demos,
+            dspy_bootstrap_max_labeled_demos=dspy_bootstrap_max_labeled_demos,
+            dspy_mipro_auto=mipro_auto_value,
+            dspy_mipro_minibatch_size=dspy_mipro_minibatch_size,
+            dspy_mipro_minibatch_full_eval_steps=dspy_mipro_minibatch_full_eval_steps,
+            dspy_mipro_program_aware_proposer=dspy_mipro_program_aware_proposer,
+            dspy_mipro_data_aware_proposer=dspy_mipro_data_aware_proposer,
+            dspy_mipro_tip_aware_proposer=dspy_mipro_tip_aware_proposer,
+            dspy_mipro_fewshot_aware_proposer=dspy_mipro_fewshot_aware_proposer,
+            pydantic_ai_num_few_shot_examples=pydantic_ai_num_few_shot_examples,
         )
         command = TuneCommand(request)
         response = command.execute()
@@ -345,6 +369,12 @@ def classify_tune(
 
 @classify_app.command("evaluate")
 def classify_evaluate(
+    framework: Annotated[
+        FrameworkType,
+        typer.Option(
+            help="ML framework to use (dspy, langchain, or pydantic-ai)",
+        ),
+    ] = FrameworkType.DSPY,
     model_name: Annotated[
         str,
         typer.Option(
@@ -372,7 +402,7 @@ def classify_evaluate(
     project: Annotated[
         str,
         typer.Option(
-            help="Project identifier for MLFlow (e.g., 1-dspy)",
+            help="Project identifier for MLFlow (e.g., 1-dspy, 2-langchain)",
         ),
     ] = "default",
     experiment_name: Annotated[
@@ -388,19 +418,22 @@ def classify_evaluate(
         ),
     ] = "http://localhost:5001",
 ) -> None:
-    """Evaluate saved model on specified dataset split.
+    """Evaluate saved model on specified dataset split using DSPy or LangChain.
 
     Examples:
-        # Evaluate latest version on test set
-        symptom-diagnosis-explorer classify evaluate
+        # Evaluate latest DSPy model on test set
+        symptom-diagnosis-explorer classify evaluate --framework dspy
+
+        # Evaluate latest LangChain model on test set
+        symptom-diagnosis-explorer classify evaluate --framework langchain
 
         # Evaluate specific version on validation set
-        symptom-diagnosis-explorer classify evaluate --model-version 2 --split validation
+        symptom-diagnosis-explorer classify evaluate --framework dspy --model-version 2 --split validation
 
         # Evaluate on first 10 test examples
         symptom-diagnosis-explorer classify evaluate --eval-size 10
     """
-    console.print(f"[bold]Evaluating model on {split} set...[/bold]")
+    console.print(f"[bold]Evaluating {framework.value} model on {split} set...[/bold]")
 
     try:
         # Construct full experiment name
@@ -410,6 +443,7 @@ def classify_evaluate(
 
         # Create request and execute command
         request = EvaluateRequest(
+            framework=framework,
             model_name=model_name,
             model_version=model_version,
             split=split,
@@ -440,72 +474,6 @@ def classify_evaluate(
 
     except Exception as e:
         console.print(f"[red]Error evaluating model: {e}[/red]")
-        raise typer.Exit(1)
-
-
-@classify_app.command("list-models")
-def classify_list_models(
-    name_filter: Annotated[
-        Optional[str],
-        typer.Option(
-            help="Filter models by name (substring match)",
-        ),
-    ] = None,
-) -> None:
-    """List models in MLFlow registry.
-
-    Examples:
-        # List all models
-        symptom-diagnosis-explorer classify list-models
-
-        # Filter by name
-        symptom-diagnosis-explorer classify list-models --name-filter symptom
-    """
-    console.print("[bold]Querying MLFlow model registry...[/bold]")
-
-    try:
-        # Create request and execute command
-        request = ListModelsRequest(name_filter=name_filter)
-        command = ListModelsCommand()
-        response = command.execute(request)
-
-        # Display results
-        if response.total_count == 0:
-            console.print("\n[yellow]No models found in registry.[/yellow]")
-            return
-
-        console.print(
-            f"\n[bold green]Found {response.total_count} model(s)[/bold green]\n"
-        )
-
-        # Models table
-        models_table = Table(title="Registered Models")
-        models_table.add_column("Name", style="bold cyan")
-        models_table.add_column("Version", style="magenta")
-        models_table.add_column("Aliases", style="yellow")
-        models_table.add_column("Created", style="green")
-        models_table.add_column("Val Accuracy", style="blue")
-
-        for _, row in response.models.iterrows():
-            # Get validation accuracy from metrics if available
-            val_acc = row["metrics"].get("validation_accuracy", None)
-            val_acc_str = f"{val_acc:.4f}" if val_acc is not None else "N/A"
-
-            # Format aliases
-            aliases_str = ", ".join(row["aliases"]) if row["aliases"] else "None"
-
-            models_table.add_row(
-                row["name"],
-                str(row["version"]),
-                aliases_str,
-                row["creation_time"].strftime("%Y-%m-%d %H:%M"),
-                val_acc_str,
-            )
-
-        console.print(models_table)
-
-    except Exception as e:
-        console.print(f"[red]Error listing models: {e}[/red]")
         raise typer.Exit(1)
 
 
