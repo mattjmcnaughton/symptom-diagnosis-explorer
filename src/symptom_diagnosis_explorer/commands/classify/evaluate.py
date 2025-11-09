@@ -6,16 +6,26 @@ from pydantic import BaseModel, Field
 
 from symptom_diagnosis_explorer.models.model_development import (
     ClassificationConfig,
+    DSPyConfig,
     EvaluateMetrics,
+    FrameworkType,
+    LangChainConfig,
+    PydanticAIConfig,
 )
-from symptom_diagnosis_explorer.services.model_development import (
-    ModelDevelopmentService,
-)
+from symptom_diagnosis_explorer.services.dataset import DatasetService
+from symptom_diagnosis_explorer.services.ml_models import FrameworkRegistry
 
 
 class EvaluateRequest(BaseModel):
     """Request model for evaluating a saved model."""
 
+    # Framework selection
+    framework: FrameworkType = Field(
+        default=FrameworkType.DSPY,
+        description="ML framework to use (dspy or langchain)",
+    )
+
+    # Common parameters
     model_name: str = Field(
         default="symptom-classifier",
         description="Model name in MLFlow registry",
@@ -45,6 +55,14 @@ class EvaluateRequest(BaseModel):
         default="http://localhost:5001",
         description="MLFlow tracking server URI",
     )
+
+    # LangChain-specific parameters
+    # Note: Few-shot examples are managed directly in the prompt templates
+    # No additional parameters needed for LangChain at this time
+
+    # Pydantic-AI-specific parameters
+    # Note: Agent is recreated from hardcoded configuration
+    # No additional parameters needed for Pydantic-AI at this time
 
 
 class EvaluateResponse(BaseModel):
@@ -83,13 +101,30 @@ class EvaluateCommand:
             RuntimeError: If the dataset cannot be loaded.
             ValueError: If the split is invalid.
         """
+        # Build framework-specific config based on selected framework
+        if request.framework == FrameworkType.DSPY:
+            # DSPy doesn't need framework_config for evaluation (loads from MLFlow)
+            framework_config = DSPyConfig()
+        elif request.framework == FrameworkType.LANGCHAIN:
+            # LangChain recreates chain from hardcoded prompts
+            framework_config = LangChainConfig()
+        elif request.framework == FrameworkType.PYDANTIC_AI:
+            # Pydantic-AI recreates agent from hardcoded configuration
+            framework_config = PydanticAIConfig()
+        else:
+            raise ValueError(f"Unsupported framework: {request.framework}")
+
         # Create configuration for evaluation with experiment tracking
         config = ClassificationConfig(
+            framework_config=framework_config,
             mlflow_experiment_name=request.experiment_name,
             mlflow_experiment_project=request.experiment_project,
             mlflow_tracking_uri=request.mlflow_tracking_uri,
         )
-        service = ModelDevelopmentService(config)
+
+        # Create service via registry with dataset service
+        dataset_service = DatasetService()
+        service = FrameworkRegistry.create_service(config, dataset_service)
 
         # Call service to evaluate model
         metrics: EvaluateMetrics = service.evaluate(

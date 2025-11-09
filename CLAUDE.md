@@ -61,7 +61,155 @@ Services Layer (services/)
     ↓
 Models Layer (models/)
     ↓
-External Dependencies (DSPy, MLFlow, HuggingFace Datasets)
+External Dependencies (DSPy, LangChain, MLFlow, HuggingFace Datasets)
+```
+
+### Multi-Framework Architecture
+
+The classification system supports multiple ML frameworks through a registry pattern:
+
+```
+services/ml_models/
+├── __init__.py           # Public API exports
+├── base.py               # BaseModelService abstract class
+├── registry.py           # FrameworkRegistry for service discovery
+├── dspy.py               # DSPyModelService (trainable)
+└── langchain.py          # LangChainModelService (non-trainable)
+```
+
+**Key Components:**
+
+1. **BaseModelService** (`base.py`): Abstract base class defining the interface all frameworks must implement
+   - Abstract methods: `tune()`, `evaluate()`
+   - Abstract properties: `requires_training`, `framework_type`
+   - Shared helpers: `_log_dataset_info()`, `_setup_mlflow_experiment()`
+
+2. **FrameworkRegistry** (`registry.py`): Centralized registry for framework service classes
+   - Services self-register using `@FrameworkRegistry.register(FrameworkType.FRAMEWORK_NAME)`
+   - Factory method: `create_service(config, dataset_service)` instantiates the correct service
+   - Discovery: `list_frameworks()` returns available frameworks
+
+3. **Framework Services**: Concrete implementations
+   - **DSPyModelService**: Trainable models using DSPy optimizers (BootstrapFewShot, MIPROv2)
+   - **LangChainModelService**: Non-trainable models using prompt engineering with LCEL chains
+   - **PydanticAIModelService**: Non-trainable models using agent-based prompting with Pydantic validation
+
+**Framework Characteristics:**
+
+| Framework   | Requires Training | MLFlow Usage | Evaluation Strategy |
+|-------------|-------------------|--------------|---------------------|
+| DSPy        | Yes               | Loads compiled model from MLFlow | Uses saved optimization artifacts |
+| LangChain   | No                | Only logs metrics/params | Recreates chain from hardcoded prompts |
+| Pydantic-AI | No                | Only logs metrics/params | Recreates agent from config |
+
+### Adding a New Framework
+
+To add support for a new ML framework, follow these steps:
+
+**1. Create Framework Configuration Model** (`models/model_development.py`):
+```python
+from pydantic import BaseModel, Field, computed_field
+from typing import Literal
+
+class NewFrameworkConfig(BaseFrameworkConfig):
+    """Configuration for NewFramework."""
+    framework: Literal[FrameworkType.NEW_FRAMEWORK] = FrameworkType.NEW_FRAMEWORK
+
+    # Framework-specific settings
+    some_setting: str = Field(description="Framework-specific setting")
+
+    @computed_field
+    @property
+    def requires_training(self) -> bool:
+        return True  # or False, depending on framework
+```
+
+**2. Add to FrameworkType Enum**:
+```python
+class FrameworkType(str, Enum):
+    DSPY = "dspy"
+    LANGCHAIN = "langchain"
+    NEW_FRAMEWORK = "new_framework"  # Add this
+```
+
+**3. Update FrameworkConfig Union**:
+```python
+FrameworkConfig = Annotated[
+    Union[DSPyConfig, LangChainConfig, NewFrameworkConfig],  # Add NewFrameworkConfig
+    Field(discriminator="framework")
+]
+```
+
+**4. Create Service Implementation** (`services/ml_models/new_framework.py`):
+```python
+from services.ml_models.base import BaseModelService
+from services.ml_models.registry import FrameworkRegistry
+from models.model_development import FrameworkType
+
+@FrameworkRegistry.register(FrameworkType.NEW_FRAMEWORK)
+class NewFrameworkModelService(BaseModelService):
+    """Service for NewFramework-based models."""
+
+    @property
+    def framework_type(self) -> str:
+        return FrameworkType.NEW_FRAMEWORK
+
+    @property
+    def requires_training(self) -> bool:
+        return True  # or False
+
+    def tune(self, train_size, val_size, model_name) -> tuple[TuneMetrics, ModelInfo]:
+        # Implement training/tuning logic
+        pass
+
+    def evaluate(self, model_name, model_version, split, eval_size) -> EvaluateMetrics:
+        # Implement evaluation logic
+        pass
+```
+
+**5. Update Command Layer** (`commands/classify/tune.py` and `evaluate.py`):
+```python
+# In TuneCommand.__init__:
+elif request.framework == FrameworkType.NEW_FRAMEWORK:
+    framework_config = NewFrameworkConfig(
+        some_setting=request.new_framework_some_setting,
+    )
+```
+
+**6. Update CLI** (`cli.py`):
+```python
+# Add framework-specific CLI options with prefix
+new_framework_some_setting: Annotated[
+    str,
+    typer.Option(help="[NewFramework] Description of setting"),
+] = "default_value"
+```
+
+**7. Add Tests** (`tests/integration/services/ml_models/test_new_framework_integration.py`):
+```python
+@pytest.mark.integration
+@pytest.mark.llm
+class TestNewFrameworkModelService:
+    def test_tune_with_small_dataset(self, ...):
+        # Test tuning workflow
+        pass
+
+    def test_evaluate_on_test_split(self, ...):
+        # Test evaluation workflow
+        pass
+```
+
+**8. Update Exports** (`services/ml_models/__init__.py`):
+```python
+from symptom_diagnosis_explorer.services.ml_models.new_framework import NewFrameworkModelService
+
+__all__ = [
+    "BaseModelService",
+    "FrameworkRegistry",
+    "DSPyModelService",
+    "LangChainModelService",
+    "NewFrameworkModelService",  # Add this
+]
 ```
 
 ## Code Patterns

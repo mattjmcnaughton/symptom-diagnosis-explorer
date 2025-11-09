@@ -11,11 +11,15 @@ requires-python = ">=3.13"
 dependencies = [
     "datasets>=4.2.0",
     "dspy>=3.0.3",
+    "langchain>=1.0.5",
+    "langchain-community>=0.4.1",
+    "langchain-ollama>=1.0.0",
     "mlflow>=3.5.0",
     "ollama>=0.6.0",
     "pandas>=2.3.3",
     "pandera[pandas,mypy]>=0.26.1",
     "peft>=0.17.1",
+    "pydantic-ai-slim[openai]>=1.14.1",
     "rich>=14.0.0",
     "scikit-learn>=1.7.2",
     "transformers>=4.57.1",
@@ -46,3 +50,6 @@ markers = [
     "ollama: marks tests as requiring Ollama (deselect with '-m \"not ollama\"')",
     "slow: marks tests as slow running (deselect with '-m \"not slow\"')",
 ]
+
+[tool.ty.rules]
+possibly-missing-attribute = "ignore"

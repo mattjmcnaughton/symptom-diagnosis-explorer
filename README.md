@@ -188,21 +188,6 @@ uv run symptom-diagnosis-explorer classify evaluate --split train
 - `--model-version`: Model version (default: latest)
 - `--split`: Dataset split (`train`, `validation`, or `test`, default: `test`)
 
-#### List Registered Models
-
-List models in the MLFlow registry.
-
-```bash
-# List all registered models
-uv run symptom-diagnosis-explorer classify list-models
-
-# Filter by name
-uv run symptom-diagnosis-explorer classify list-models --name-filter symptom
-```
-
-**List Models Command Options:**
-- `--name-filter`: Filter models by name (substring match)
-
 ## MLFlow Tracking
 
 This project uses MLFlow for experiment tracking and model registry.
