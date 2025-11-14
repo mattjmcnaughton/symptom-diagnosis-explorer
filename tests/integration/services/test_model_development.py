@@ -30,19 +30,22 @@ from symptom_diagnosis_explorer.services.model_development import (
 REQUIRED_MODELS = ["qwen3:1.7b", "qwen3:8b"]
 
 
-# Module-level check: fail entire module if required models aren't available
-_all_available, _missing_models = check_all_required_models(REQUIRED_MODELS)
-if not _all_available:
-    pytest.fail(
-        f"Required Ollama models not available: {_missing_models}\n"
-        f"Install missing models with:\n"
-        + "\n".join(
-            f"  ollama pull {model}"
-            for model in _missing_models
-            if "Ollama" not in model
-        ),
-        pytrace=False,
-    )
+# Module-level check: skip entire module if required models aren't available
+try:
+    _all_available, _missing_models = check_all_required_models(REQUIRED_MODELS)
+    if not _all_available:
+        _skip_message = (
+            f"Required Ollama models not available: {_missing_models}\n"
+            f"Install missing models with:\n"
+            + "\n".join(
+                f"  ollama pull {model}"
+                for model in _missing_models
+                if "Ollama" not in model
+            )
+        )
+        pytest.skip(_skip_message, allow_module_level=True)
+except Exception as e:
+    pytest.skip(f"Cannot check Ollama availability: {e}", allow_module_level=True)
 
 
 @pytest.fixture
