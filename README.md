@@ -229,6 +229,8 @@ For more details on the naming convention, see [projects/README.md](projects/REA
 
 ## Development
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed setup, workflow, and quality expectations for contributors.
+
 ### Running Tests
 
 ```bash

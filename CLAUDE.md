@@ -13,6 +13,8 @@ Use the [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/) s
 Example conventional commit: `feat: add dataset summary command`.
 Keep commit bodies concise and focused on what changed and why.
 
+Human contributors should review [CONTRIBUTING.md](CONTRIBUTING.md) for repository-wide workflows and expectations.
+
 ## Testing
 
 Always use the project's justfile for running tests:
