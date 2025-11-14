@@ -2,17 +2,18 @@ name: Claude Code Review
 
 on:
   pull_request:
-    types: [opened, synchronize]
+    types: [opened]  # Only run automatically when PR is first created
     # Optional: Only run on specific file changes
     # paths:
     #   - "src/**/*.ts"
     #   - "src/**/*.tsx"
     #   - "src/**/*.js"
     #   - "src/**/*.jsx"
+  workflow_dispatch:  # Allow manual triggering from GitHub UI
 
 jobs:
   claude-review:
-    if: github.event.pull_request.user.login == 'mattjmcnaughton'
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.user.login == 'mattjmcnaughton'
 
     runs-on: ubuntu-latest
     permissions:
