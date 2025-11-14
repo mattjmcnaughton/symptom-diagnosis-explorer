@@ -4,6 +4,7 @@ from symptom_diagnosis_explorer.models.dataset import DatasetSplit
 from symptom_diagnosis_explorer.models.domain import (
     DiagnosisType,
     SymptomDiagnosisDatasetDF,
+    SymptomDiagnosisDatasetPL,
     SymptomDiagnosisExample,
     SymptomDiagnosisSignature,
 )
@@ -27,6 +28,7 @@ __all__ = [
     "OptimizerConfig",
     "OptimizerType",
     "SymptomDiagnosisDatasetDF",
+    "SymptomDiagnosisDatasetPL",
     "SymptomDiagnosisExample",
     "SymptomDiagnosisSignature",
     "TuneMetrics",

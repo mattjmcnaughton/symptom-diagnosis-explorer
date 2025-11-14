@@ -1,6 +1,7 @@
 """Integration tests for the DatasetService."""
 
 import pandas as pd
+import polars as pl
 import pytest
 
 from symptom_diagnosis_explorer.models import (
@@ -55,6 +56,11 @@ class TestDatasetService:
         # Verify no null values in required columns
         assert train_df["symptoms"].notna().all()
         assert train_df["diagnosis"].notna().all()
+
+        # Verify Polars cache is populated and aligned with pandas view
+        assert service._train_pl is not None
+        assert isinstance(service._train_pl, pl.DataFrame)
+        assert service._train_pl.height == len(train_df)
 
     def test_get_test_dataframe(self, service):
         """Test getting test data with proper schema validation."""

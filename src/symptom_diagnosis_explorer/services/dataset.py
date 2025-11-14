@@ -4,10 +4,15 @@ from typing import Optional
 
 import pandas as pd
 import pandera.typing as pat
+import polars as pl
 from datasets import load_dataset
 from sklearn.model_selection import train_test_split
 
-from symptom_diagnosis_explorer.models import DatasetSplit, SymptomDiagnosisDatasetDF
+from symptom_diagnosis_explorer.models import (
+    DatasetSplit,
+    SymptomDiagnosisDatasetDF,
+    SymptomDiagnosisDatasetPL,
+)
 
 
 class DatasetService:
@@ -23,6 +28,7 @@ class DatasetService:
         """Initialize the dataset service."""
         self._dataset = None
         self._train_df: Optional[pd.DataFrame] = None
+        self._train_pl: Optional[pl.DataFrame] = None
         self._test_df: Optional[pd.DataFrame] = None
         self._validation_df: Optional[pd.DataFrame] = None
 
@@ -50,6 +56,23 @@ class DatasetService:
         # Validate against schema
         return SymptomDiagnosisDatasetDF.validate(df)
 
+    def _load_train_polars_dataframe(self) -> pl.DataFrame:
+        """Materialize and validate the training split as a Polars DataFrame."""
+        if self._dataset is None:
+            raise RuntimeError("Dataset not loaded. Call load() first.")
+
+        if self._train_pl is None:
+            train_split = self._dataset["train"]
+            arrow_table = train_split.data.table
+            train_polars = (
+                pl.from_arrow(arrow_table)
+                .rename({"input_text": "symptoms", "output_text": "diagnosis"})
+                .with_columns(pl.col("symptoms").str.strip_chars())
+            )
+            self._train_pl = SymptomDiagnosisDatasetPL.validate(train_polars)
+
+        return self._train_pl
+
     def get_train_dataframe(self) -> pat.DataFrame[SymptomDiagnosisDatasetDF]:
         """Get the training split as a pandas DataFrame.
 
@@ -64,8 +87,9 @@ class DatasetService:
             raise RuntimeError("Dataset not loaded. Call load() first.")
 
         if self._train_df is None:
-            df = self._dataset["train"].to_pandas()
-            self._train_df = self._prepare_and_validate_dataframe(df)
+            polars_df = self._load_train_polars_dataframe()
+            pandas_df = polars_df.to_pandas()
+            self._train_df = SymptomDiagnosisDatasetDF.validate(pandas_df)
 
         return self._train_df
 

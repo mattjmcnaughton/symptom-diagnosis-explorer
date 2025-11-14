@@ -8,7 +8,9 @@ from enum import Enum
 
 import dspy
 import pandera.pandas as pa
+import pandera.polars as pa_pl
 from pandera.engines.pandas_engine import PydanticModel
+from pandera.typing import polars as pat_pl
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
@@ -115,6 +117,21 @@ class SymptomDiagnosisDatasetDF(pa.DataFrameModel):
 
         dtype = PydanticModel(SymptomDiagnosisExample)
         coerce = True  # Required for PydanticModel
+
+
+class SymptomDiagnosisDatasetPL(pa_pl.DataFrameModel):
+    """Pandera schema for a Polars DataFrame of symptom-diagnosis examples."""
+
+    symptoms: pat_pl.Series[str] = pa_pl.Field(coerce=True)
+    diagnosis: pat_pl.Series[str] = pa_pl.Field(
+        isin=[diagnosis.value for diagnosis in DiagnosisType],
+        coerce=True,
+    )
+
+    class Config:
+        """Polars schema configuration."""
+
+        strict = True
 
 
 class SymptomDiagnosisSignature(dspy.Signature):
