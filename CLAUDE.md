@@ -1,6 +1,17 @@
-# Claude Code Development Guidelines
+# Autonomous Coding Agent Guidelines
 
-This document contains guidance for Claude Code when working on this project.
+This document contains guidance for any code-generation agent collaborating on this project.
+
+Please also review the repository documentation for additional context:
+- [README.md](README.md)
+- [CONTRIBUTING.md](CONTRIBUTING.md)
+- Additional references in the `docs/` directory
+
+## Commit Messages
+
+Use the [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/) specification for all commit messages.
+Example conventional commit: `feat: add dataset summary command`.
+Keep commit bodies concise and focused on what changed and why.
 
 ## Testing
 
@@ -11,6 +22,12 @@ just test
 ```
 
 Do NOT run pytest directly. The justfile ensures proper configuration and environment setup.
+
+## Pull Requests
+
+- Keep changes tightly scoped; split work into separate PRs when needed.
+- Summarize modifications and corresponding tests in the final hand-off message.
+- Reference relevant issues or tickets in the PR description when applicable.
 
 ## Project Structure
 
