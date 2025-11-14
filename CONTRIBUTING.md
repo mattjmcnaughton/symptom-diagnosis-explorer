@@ -29,6 +29,14 @@ just test-integration
 just test-e2e
 ```
 
+The `just` targets are the recommended defaults, but feel free to invoke the underlying tools directly when you need more control:
+
+```bash
+uv run pytest tests/unit -k tokenizer
+uv run pytest tests/integration --maxfail=1
+uv run pytest tests/e2e -n auto
+```
+
 ### Code Quality
 
 ```bash
@@ -49,6 +57,14 @@ just typecheck
 
 # Run all CI checks
 just ci
+```
+
+You can also copy the arguments from the `justfile` and run the tools directly:
+
+```bash
+uv run ruff check src --fix
+uv run ruff format
+uv run mypy src
 ```
 
 ### Jupyter Notebooks
