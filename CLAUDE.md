@@ -15,13 +15,32 @@ Keep commit bodies concise and focused on what changed and why.
 
 ## Testing
 
-Always use the project's justfile for running tests:
+Prefer the recipes in the project's `justfile` for common workflows, but feel free to run the underlying tooling directly via `uv run ...` commands whenever you need custom flags or tighter scopes.
 
 ```bash
+# Reproducible defaults from the justfile
 just test
+just test-integration
+
+# Direct invocations for targeted debugging
+uv run pytest tests/unit -k tokenizer
+uv run pytest tests/integration --maxfail=1
 ```
 
-Do NOT run pytest directly. The justfile ensures proper configuration and environment setup.
+## Quality Checks
+
+Use the commands in `justfile` as a quick reference for linters, formatters, and type checkers. Coding agents can copy those options or run the tools directly.
+
+```bash
+# Recipes
+just lint
+just format
+
+# Direct tooling
+uv run ruff check src --fix
+uv run ruff format
+uv run mypy src
+```
 
 ## Pull Requests
 
@@ -81,6 +100,6 @@ The train/validation split is deterministic (random_state=42) and cached to ensu
 ## Development Workflow
 
 1. Make changes to code
-2. Run tests: `just test`
+2. Run tests via `just test` or direct commands such as `uv run pytest tests/unit -k my_case`
 3. Verify via CLI commands (e.g., `symptom-diagnosis-explorer dataset summary --split validation`)
-4. Check types/linting if needed (see justfile for available commands)
+4. Check types/linting as needed using `just lint`, `uv run ruff check`, `uv run mypy`, etc.
